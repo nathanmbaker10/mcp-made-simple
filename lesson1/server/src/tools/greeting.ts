@@ -1,37 +1,38 @@
+// 1. Import dependencies
 import { z } from "zod";
 
-// 1. Tool Schema
+// 2. Tool Schema
 export const GreetingToolSchema = z.object({
   name: z.string(),
 });
 
-// 2. Tool listing information
+// 3. Tool Listing Information Definition
 export const greetingToolDefinition = {
   name: "greeting",
-  description: "Returns a greeting message",
+  description: "Returns a greeting message to the user",
   inputSchema: {
     type: "object",
     properties: {
       name: {
         type: "string",
-        description: "The name to greet",
-      },
+        description: "The name of the user to greet"
+      }
     },
-    required: ["name"],
-  },
-};
+    required: ["name"]
+  }
 
-// 3. Tool implementation
+}
+
+// 4. Tool Implementation
 export const handleGreeting = (args: unknown) => {
-  const validated = GreetingToolSchema.parse(args);
-  const { name } = validated;
+  const { name } = GreetingToolSchema.parse(args);
 
   return {
     content: [
       {
-        type: "text",
-        text: `Hello, ${name}! Welcome to the Model Context Protocol.`,
+        type: "text" as const,
+        text: `Hello, ${name}! How can I help you today?`,
       },
     ],
   };
-};
+}
