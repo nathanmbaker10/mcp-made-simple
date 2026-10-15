@@ -8,18 +8,26 @@
   },
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '0755')\"",
-    "start": "node build/index.js"
+    "start": "node build/index.js",
+    "start:http": "node build/http.js",
+    "test:http": "npm run build && node scripts/test-remote.mjs"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
-  "description": "A simple Hello World MCP server",
+  "description": "A simple Hello World MCP server with stdio and Streamable HTTP",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.0",
-    "@types/node": "^20.0.0",
-    "ts-node": "^10.9.1"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@types/node": "^22.0.0",
+    "express": "^5.2.1",
+    "ts-node": "^10.9.1",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "typescript": "^5.0.0"
   }
 }

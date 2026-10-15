@@ -13,18 +13,22 @@ server/
 ├── package.json        # Node.js project configuration
 ├── tsconfig.json      # TypeScript configuration
 └── src/
-    ├── index.ts       # Main server implementation
+    ├── index.ts       # stdio transport (local IDE)
+    ├── http.ts        # Streamable HTTP transport (remote)
+    ├── createServer.ts # Shared server and tool registration
+    ├── auth.ts        # Bearer token for the HTTP endpoint
     └── tools/         # Tool implementations
         └── greeting.ts # Greeting tool definition
 ```
 
 ## Key Components
 
-1. **Server Setup** (`index.ts`)
+1. **Server Setup** (`createServer.ts`, started from `index.ts`)
    - Creates an MCP server instance
    - Defines tool list
    - Implements tool call handlers
-   - Sets up stdio transport
+   - `index.ts` connects that server to stdio for a local IDE
+   - `http.ts` connects it to Streamable HTTP for a remote client. See [Lesson 4](../lesson4/)
 
 2. **Tool Implementation** (`tools/greeting.ts`)
    - Defines tool interface
@@ -68,11 +72,12 @@ This will:
 
 - **MCP Server**: A standardized way to extend AI capabilities in IDEs
 - **Tools**: Modular functions that can be called by the IDE
-- **Transport**: Communication layer (stdio in this case)
+- **Transport**: Communication layer. Lesson 1 uses stdio. [Lesson 4](../lesson4/) adds Streamable HTTP so the same greeting tool can be reached over the internet
 - **Request Handlers**: Logic for processing tool requests
 
 ## Next Steps
 
 - Try modifying the greeting tool
 - Add new tools to the server
+- [Lesson 4](../lesson4/): deploy this server and call the greeting tool from Gemini CLI
 - Explore more complex MCP features
