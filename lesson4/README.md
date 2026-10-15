@@ -110,10 +110,12 @@ You do these steps by hand. The repo cannot create the account or store the toke
 
 5. Select this repository. Render reads `render.yaml` and creates a web service named `mcp-greeting`:
    - Root directory: `lesson1/server`
-   - Build: `npm ci && npm run build`
+   - Build: `if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build`
    - Start: `npm run start:http`
    - Health check: `/health`
    - Node: `22.14.0`
+
+   `lesson1/server/package-lock.json` is committed, so this build runs `npm ci`. If that lockfile is not in the checkout, the same command runs `npm install`.
 
 6. When Render asks for `MCP_AUTH_TOKEN`, paste the token from step 1. Leave the value out of git, the README, and screenshots.
 
@@ -132,10 +134,12 @@ The homepage and `/health` are open on purpose so you can see that the process i
 Create a **Web Service**, connect the repo, and set:
 
 - Root Directory: `lesson1/server`
-- Build Command: `npm ci && npm run build`
+- Build Command: `if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build`
 - Start Command: `npm run start:http`
 - Health Check Path: `/health`
 - Environment: `NODE_VERSION` = `22.14.0`, and `MCP_AUTH_TOKEN` = your token
+
+The root directory is `lesson1/server`, which is where `package-lock.json` is committed. The build command runs `npm ci` when that file is present and `npm install` when it is not.
 
 ## Gemini CLI for Nathan's dad
 
@@ -264,6 +268,7 @@ Any other MCP client that speaks Streamable HTTP can use `https://YOUR-SERVICE.o
 ## Troubleshooting
 
 - **Deploy fails immediately** with a log line about `MCP_AUTH_TOKEN`: the variable is empty or shorter than 16 characters. Set it in the Render dashboard and redeploy.
+- **Build log says `npm ci` can only install with an existing package-lock.json**: set the root directory to `lesson1/server` and use the build command from `render.yaml`. That directory's `package-lock.json` is committed, so the command runs `npm ci`. If the lockfile is missing from the checkout, the same command runs `npm install`.
 - **`/health` works and `/mcp` returns 401**: the server is up. Gemini CLI needs `Authorization: Bearer <token>`. The web app needs the token in the path, `https://YOUR-SERVICE.onrender.com/mcp/<token>`, with the OAuth fields left blank.
 - **The web app asks you to sign in or enter a client id**: the URL it is using returned 401, so Gemini is looking for OAuth. Paste the path URL again, with the hex token as the last segment and no trailing slash. Leave the client id and secret empty.
 - **Connected Apps is missing**: the Google account is outside the current custom-app rollout (personal account, 18+, US, English, Keep Activity on). Gemini CLI still works with the header setup.

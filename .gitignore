@@ -65,3 +65,6 @@ Desktop.ini
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Keep npm lockfiles. Render runs `npm ci` when package-lock.json is committed.
+!package-lock.json
