@@ -1,0 +1,17 @@
+# Deploys the Lesson 1 greeting server so a remote Gemini client can call it.
+# In the Render Dashboard: New > Blueprint, then select this repository.
+# Render asks for MCP_AUTH_TOKEN because sync is false. Keep that value out of git.
+services:
+  - type: web
+    name: mcp-greeting
+    runtime: node
+    plan: free
+    rootDir: lesson1/server
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:http
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.14.0"
+      - key: MCP_AUTH_TOKEN
+        sync: false
