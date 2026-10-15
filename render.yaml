@@ -7,7 +7,9 @@ services:
     runtime: node
     plan: free
     rootDir: lesson1/server
-    buildCommand: npm ci && npm run build
+    # Runs in lesson1/server. package-lock.json is committed there, so this uses npm ci.
+    # A checkout without that lockfile uses npm install instead of failing.
+    buildCommand: "if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build"
     startCommand: npm run start:http
     healthCheckPath: /health
     envVars:
