@@ -2,7 +2,7 @@
 
 Lesson 1 built an MCP server with one tool, `greeting`. That server talks over **stdio**: it only runs on the same computer as the IDE that started it. This lesson keeps that tool and adds a second way to reach it, **Streamable HTTP**, so the server can run on a host and answer clients over the internet.
 
-Nathan deploys it. His dad connects from Gemini CLI and asks the greeting tool to say hello.
+Nathan deploys it. His dad can call the greeting tool from Gemini CLI, or from the Gemini web app at gemini.google.com.
 
 The greeting behavior is unchanged:
 
@@ -17,7 +17,7 @@ The greeting behavior is unchanged:
 | Shared server | `lesson1/server/src/createServer.ts` | Registers the greeting tool once |
 | Local transport | `lesson1/server/src/index.ts` | stdio, same as Lesson 1 (`npm start`) |
 | Remote transport | `lesson1/server/src/http.ts` | Streamable HTTP on `/mcp` (`npm run start:http`) |
-| Bearer token | `MCP_AUTH_TOKEN` | Required on `/mcp` |
+| Bearer token | `MCP_AUTH_TOKEN` | Required on `/mcp` as a header, or as the last path segment `/mcp/<token>` |
 | Health check | `GET /health` | Tells the host the process is up. No token required |
 | Host config | `render.yaml` at the repo root | Render blueprint for a free web service |
 
@@ -40,7 +40,9 @@ npm run test:http
 - The process exits if `MCP_AUTH_TOKEN` is missing
 - `GET /health` returns `{"status":"ok"}` with no token
 - `POST /mcp` returns 401 when the token is missing or wrong
-- An MCP client can list `greeting` and call it over HTTP
+- An MCP client can list `greeting` and call it over HTTP with a bearer header
+- The same client can list and call `greeting` at `/mcp/<token>` with no header
+- A wrong or partial path token returns 401, and the body does not echo the token
 - The original stdio server still lists and calls the same tool
 
 Leave a server running yourself when you want to poke at it:
@@ -62,9 +64,19 @@ curl -s -o /dev/null -w "%{http_code}\n" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-That prints `401`.
+That prints `401`. The same call with the token in the path (no `Authorization` header) is the URL the Gemini web app uses. With the server still running in that terminal:
 
-On startup you will see a warning that the server is binding to `0.0.0.0` without DNS rebinding protection. That is expected. Render's public hostname does not exist until the service is created, so the lesson uses the bearer token as the lock on `/mcp`.
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -X POST "http://127.0.0.1:3000/mcp/$MCP_AUTH_TOKEN" \
+  -H "content-type: application/json" \
+  -H "accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0.0"}}}'
+```
+
+A correct token prints `200`.
+
+On startup you will see a warning that the server is binding to `0.0.0.0` without DNS rebinding protection. That is expected. Render's public hostname does not exist until the service is created, so the lesson locks `/mcp` with the token (header or path).
 
 `npm start` is still the local stdio server for Cursor, Windsurf, and VS Code. Point those tools at `node build/index.js` inside `lesson1/server`, the same way Lesson 1 describes.
 
@@ -76,7 +88,7 @@ With `npm run start:http` still running, you can open the official inspector UI:
 npx @modelcontextprotocol/inspector
 ```
 
-Connect it to `http://127.0.0.1:3000/mcp` using the Streamable HTTP transport, and add the header `Authorization: Bearer <the token you exported>`. List tools, then call `greeting` with a name. The script above is the check this lesson relies on; the inspector is a way to click through the same calls.
+Connect it to `http://127.0.0.1:3000/mcp` using the Streamable HTTP transport, and add the header `Authorization: Bearer <the token you exported>`. The web-app shape works here too: connect to `http://127.0.0.1:3000/mcp/<token>` and leave the header empty. List tools, then call `greeting` with a name. The script above is the check this lesson relies on; the inspector is a way to click through the same calls.
 
 ## Deploy on Render
 
@@ -109,11 +121,11 @@ You do these steps by hand. The repo cannot create the account or store the toke
 
 8. Wait until the deploy is **Live**. Open the service URL Render shows you. You should see a short text page. Open `https://YOUR-SERVICE.onrender.com/health` and confirm `{"status":"ok"}`.
 
-9. Send your dad two things in a private message:
-   - The MCP URL, including the path: `https://YOUR-SERVICE.onrender.com/mcp`
-   - The bearer token
+9. Send your dad the service URL and the token in a private message. He needs a different URL for each Gemini app:
+   - Gemini CLI: `https://YOUR-SERVICE.onrender.com/mcp`, plus the token in a header
+   - Gemini web app: `https://YOUR-SERVICE.onrender.com/mcp/YOUR_TOKEN` (the token is the last part of the path)
 
-The homepage and `/health` are open on purpose so you can see that the process is up. `/mcp` answers only when the request carries `Authorization: Bearer <token>`.
+The homepage and `/health` are open on purpose so you can see that the process is up. `/mcp` answers when the request carries `Authorization: Bearer <token>`. `/mcp/<token>` answers when that path segment is the same token.
 
 ### Deploying without the blueprint
 
@@ -189,6 +201,48 @@ gemini mcp add --transport http --scope user --timeout 180000 nathan-greeting \
 
 Try a second name ("greet Dad") and confirm the name in the sentence changes. That shows the server is running the Lesson 1 tool, not a fixed string.
 
+## Gemini web app for Nathan's dad
+
+The Gemini web app at [gemini.google.com](https://gemini.google.com) connects under **Settings → Connected Apps → Custom apps**. The dialog asks for the MCP server URL, and under advanced features it can take an optional OAuth client id and client secret. It has no field for an `Authorization` header, so the bearer setup from the CLI section cannot be pasted there.
+
+Google's own help says those OAuth fields are for a server that expects a full sign-in (Dynamic Client Registration, or a client id and secret you registered ahead of time). This greeting server does not run an OAuth provider. Dad leaves the OAuth fields blank and puts the token in the URL instead. Gemini then calls that exact URL for every tool request.
+
+The URL to paste:
+
+```text
+https://YOUR-SERVICE.onrender.com/mcp/YOUR_TOKEN
+```
+
+`YOUR_TOKEN` is the same `MCP_AUTH_TOKEN` Nathan set on Render. Paste it with the token as the last segment. An extra slash on the end still reaches the server. A query string such as `?token=` is ignored: the web app would have to keep that query on every request, and proxies log query strings readily, so this lesson uses the path.
+
+That is weaker than the header used by Gemini CLI. The token is part of the address, so it can show up in Render's request logs, in the browser history of whoever pastes it, and on Gemini's connected-app screen. Anyone who has the full URL can call the greeting tool. For a lesson that only says hello, that is the practical lock. Keep the URL in the same private message as the token, and avoid screenshots of the connected-app page.
+
+### Connect
+
+Google currently offers custom apps to people who are 18 or over, in the US, signed in with a personal Google Account (a work or school account will not show this), with Keep Activity on, and using English. You add the app on the web. After that it is available in the Gemini mobile app as well. If **Connected Apps** is missing, open **Personal Intelligence** first, then **Connected Apps**.
+
+1. On a computer, open [gemini.google.com](https://gemini.google.com).
+2. At the bottom, open **Settings → Connected Apps**.
+3. Under **Custom apps**, choose **Add a custom app** (or the "Add a custom app link to get started" field).
+4. When the dialog says **Connect to an MCP server**, paste `https://YOUR-SERVICE.onrender.com/mcp/YOUR_TOKEN`.
+5. Leave **OAuth Client ID** and **Client secret** empty. Skip **Advanced features** if it is collapsed.
+6. Click **Next**. Accept the notice that Google has not reviewed this server, then connect.
+7. The first request can take about a minute while the free Render service wakes up.
+
+### Check that the tool works
+
+In Gemini, start a prompt that names the app. Google's tip is to type `@` and pick the custom app, then ask: "Use the greeting tool to greet Nathan."
+
+The tool result should be:
+
+```text
+Hello, Nathan! How can I help you today?
+```
+
+Ask it to greet Dad as well. The name in the sentence should change.
+
+Custom apps are aimed at Gemini Spark and at quick actions from chat. If the connection succeeds and a normal chat still ignores the tool, switch to **Spark** and ask again with `@`.
+
 ## Other Gemini clients
 
 The same Streamable HTTP endpoint works in Gemini clients that accept `httpUrl` and `headers`:
@@ -204,13 +258,15 @@ Any other MCP client that speaks Streamable HTTP can use `https://YOUR-SERVICE.o
 - Choose the free (or cheapest) web service if the blueprint asks
 - Generate `MCP_AUTH_TOKEN`, paste it into Render, and keep it out of the repo
 - Copy the live `https://....onrender.com` URL
-- Send that URL (with `/mcp`) and the token to his dad in private
-- Dad installs Gemini CLI, adds the snippet, and runs the two checks above
+- Send his dad the token in private, the CLI URL ending in `/mcp`, and the web app URL ending in `/mcp/<token>`
+- Dad installs Gemini CLI and adds the header snippet, or pastes the secret URL into Connected Apps and leaves the OAuth fields blank
 
 ## Troubleshooting
 
 - **Deploy fails immediately** with a log line about `MCP_AUTH_TOKEN`: the variable is empty or shorter than 16 characters. Set it in the Render dashboard and redeploy.
-- **`/health` works and `/mcp` returns 401**: the server is up. The Gemini header should be exactly `Authorization: Bearer <token>` with the same token Render has.
+- **`/health` works and `/mcp` returns 401**: the server is up. Gemini CLI needs `Authorization: Bearer <token>`. The web app needs the token in the path, `https://YOUR-SERVICE.onrender.com/mcp/<token>`, with the OAuth fields left blank.
+- **The web app asks you to sign in or enter a client id**: the URL it is using returned 401, so Gemini is looking for OAuth. Paste the path URL again, with the hex token as the last segment and no trailing slash. Leave the client id and secret empty.
+- **Connected Apps is missing**: the Google account is outside the current custom-app rollout (personal account, 18+, US, English, Keep Activity on). Gemini CLI still works with the header setup.
 - **`gemini mcp list` sits there, then fails**: the free instance was asleep. Run the command again. Confirm `timeout` is `180000` and the URL ends in `/mcp`.
 - **Tool list is empty**: Gemini connected to a different server, or the URL is the site root instead of `/mcp`.
 - **Local IDE stopped seeing the tool**: local configs should still launch `npm start` / `node build/index.js`. `npm run start:http` is the remote process.

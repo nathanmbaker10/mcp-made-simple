@@ -4,7 +4,7 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import type { Request, Response } from "express";
-import { readAuthToken, requireBearerToken } from "./auth.js";
+import { readAuthToken, requireBearerToken, requirePathToken } from "./auth.js";
 import { createGreetingServer } from "./createServer.js";
 
 const token = readAuthToken();
@@ -22,7 +22,8 @@ function listenPort(): number {
 // host: "0.0.0.0" skips the SDK's localhost-only host check. The listen()
 // call below is what actually binds every interface so Render can connect.
 // The public hostname is assigned at deploy time, so this lesson does not
-// allow-list hosts. The bearer token is what keeps /mcp closed.
+// allow-list hosts. /mcp requires a bearer token. /mcp/<token> is the same
+// check for clients that can only send a URL.
 const app = createMcpExpressApp({ host: "0.0.0.0" });
 
 app.get("/health", (_req: Request, res: Response) => {
@@ -36,7 +37,8 @@ app.get("/", (_req: Request, res: Response) => {
       [
         "MCP greeting server is running.",
         "Health check: GET /health",
-        "MCP endpoint: /mcp (Authorization: Bearer <token>)",
+        "Gemini CLI: POST /mcp with Authorization: Bearer <token>",
+        "Gemini web app: POST /mcp/<token>",
         "",
       ].join("\n")
     );
@@ -53,10 +55,7 @@ function methodNotAllowed(_req: Request, res: Response): void {
   });
 }
 
-app.get("/mcp", requireBearerToken(token), methodNotAllowed);
-app.delete("/mcp", requireBearerToken(token), methodNotAllowed);
-
-app.post("/mcp", requireBearerToken(token), async (req: Request, res: Response) => {
+async function handleMcpPost(req: Request, res: Response): Promise<void> {
   // Stateless mode: a new server handles each request, which fits a
   // greeting tool and a host that may sleep between calls.
   const server = createGreetingServer();
@@ -90,7 +89,20 @@ app.post("/mcp", requireBearerToken(token), async (req: Request, res: Response) 
       });
     }
   }
-});
+}
+
+const bearerAuth = requireBearerToken(token);
+const pathAuth = requirePathToken(token);
+
+app.get("/mcp", bearerAuth, methodNotAllowed);
+app.delete("/mcp", bearerAuth, methodNotAllowed);
+app.post("/mcp", bearerAuth, handleMcpPost);
+
+// Gemini's web app can only send the server URL, so the token is the last
+// path segment. Header auth on /mcp stays available for Gemini CLI.
+app.get("/mcp/:token", pathAuth, methodNotAllowed);
+app.delete("/mcp/:token", pathAuth, methodNotAllowed);
+app.post("/mcp/:token", pathAuth, handleMcpPost);
 
 const port = listenPort();
 const httpServer = app.listen(port, "0.0.0.0");
@@ -103,7 +115,7 @@ httpServer.on("error", (error: NodeJS.ErrnoException) => {
 httpServer.on("listening", () => {
   console.error(`MCP greeting server listening on http://127.0.0.1:${port}`);
   console.error("Health check: GET /health");
-  console.error("MCP endpoint: POST /mcp");
+  console.error("MCP endpoint: POST /mcp (bearer header) and POST /mcp/<token>");
 });
 
 function shutdown(): void {

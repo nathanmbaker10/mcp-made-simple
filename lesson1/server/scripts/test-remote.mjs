@@ -210,6 +210,10 @@ async function main() {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
     assert(missing.status === 401, `missing token should be 401, got ${missing.status}`);
+    assert(
+      missing.headers.get("www-authenticate")?.includes("Bearer"),
+      "header auth 401 should advertise Bearer"
+    );
     console.log("ok: POST /mcp without a token returns 401");
 
     const wrong = await fetch(`${baseUrl}/mcp`, {
@@ -253,6 +257,73 @@ async function main() {
     console.log("ok: greeting tool still requires a name");
 
     await withTimeout(client.close(), 5000, "HTTP client close");
+
+    const wrongPathToken = "wrong-token-value-xxxx";
+    const wrongPath = await fetch(`${baseUrl}/mcp/${wrongPathToken}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    const wrongPathBody = await wrongPath.text();
+    assert(wrongPath.status === 401, `wrong path token should be 401, got ${wrongPath.status}`);
+    assert(!wrongPathBody.includes(token), "401 body included the real token");
+    assert(!wrongPathBody.includes(wrongPathToken), "401 body echoed the path token");
+    assert(
+      wrongPath.headers.get("www-authenticate") == null,
+      "path 401 should stay quiet so the web app does not start OAuth"
+    );
+    console.log("ok: POST /mcp/<wrong-token> returns 401");
+
+    for (const candidate of [token.slice(0, -1), `${token}x`]) {
+      const partial = await fetch(`${baseUrl}/mcp/${candidate}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+      assert(partial.status === 401, `partial path token should be 401, got ${partial.status}`);
+    }
+    console.log("ok: partial path tokens return 401");
+
+    const pathGet = await fetch(`${baseUrl}/mcp/${token}`);
+    assert(pathGet.status === 405, `GET /mcp/<token> should be 405, got ${pathGet.status}`);
+    console.log("ok: GET /mcp/<token> returns 405");
+
+    const initializeBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "lesson1-http-test", version: "1.0.0" },
+      },
+    });
+    const slashed = await fetch(`${baseUrl}/mcp/${token}/`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: initializeBody,
+    });
+    assert(slashed.status === 200, `trailing slash should still authenticate, got ${slashed.status}`);
+    console.log("ok: /mcp/<token>/ still accepts the token");
+
+    const query = await fetch(`${baseUrl}/mcp?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: initializeBody,
+    });
+    assert(query.status === 401, `query token should be ignored, got ${query.status}`);
+    console.log("ok: ?token= is ignored");
+
+    const pathClient = new Client({ name: "lesson1-http-path-test", version: "1.0.0" });
+    const pathTransport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp/${token}`));
+    await withTimeout(pathClient.connect(pathTransport), 10000, "path URL client connect");
+    await listGreetingTool(pathClient, "HTTP path");
+    await expectGreeting(pathClient, "Dad");
+    console.log("ok: HTTP client listed and called greeting using /mcp/<token>");
+    await withTimeout(pathClient.close(), 5000, "path URL client close");
   } finally {
     await stopChild(started.child);
   }
@@ -281,7 +352,7 @@ async function main() {
 const killer = setTimeout(() => {
   console.error("FAIL: test timed out");
   process.exit(1);
-}, 30000);
+}, 45000);
 
 main()
   .catch((error) => {
